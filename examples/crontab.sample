@@ -1,0 +1,45 @@
+# Sample crontab.
+#
+# cronplain reads five-field expressions, so take the first five columns and feed
+# them in one per line. The sixth column of a system crontab is the user the job
+# runs as, which cronplain does not care about:
+#
+#   awk '/^[^#]/ && NF >= 5 {print $1, $2, $3, $4, $5}' examples/crontab.sample | cronplain -
+#
+# (awk rather than `cut -d' '`, because the columns below are aligned with spaces
+#  and cut would emit empty fields.)
+
+# --- environment ------------------------------------------------------------
+SHELL=/bin/sh
+PATH=/usr/local/bin:/usr/bin:/bin
+MAILTO=root
+
+# --- regular maintenance ----------------------------------------------------
+0 6 * * * root /usr/local/sbin/backup-daily
+30 6 * * 0 root /usr/local/sbin/backup-weekly
+*/5 * * * * root /usr/local/bin/healthcheck --quiet
+15 2 1 * * root /usr/local/sbin/rotate-logs
+
+# --- business hours ---------------------------------------------------------
+*/15 9-17 * * MON-FRI app /usr/local/bin/sync-calendar
+0 22 * * 5 app /usr/local/bin/weekly-digest
+
+# --- the classic mistake ----------------------------------------------------
+# Almost certainly written to mean "the first Monday of the month". It does not
+# mean that. Day-of-month and day-of-week are unioned, so this fires on the 1st
+# of every month *and* on every Monday — roughly sixty-four runs a year, not
+# twelve. cronplain warns about it:
+#
+#   $ cronplain "0 3 1 * MON"
+#   At 00:00... (see the warning on stderr)
+#
+0 3 1 * MON app /usr/local/bin/monthly-report
+
+# --- and the honest fix -----------------------------------------------------
+# Pure cron cannot express "first Monday" portably. `1-7 * MON` is frequently
+# recommended, but it only means "the first Monday" in implementations that
+# intersect the two day fields; Vixie cron, which most Linux distributions ship,
+# unions them, so that line fires on days 1-7 *and* on every Monday.
+#
+# The reliable form keeps a plain weekly trigger and lets the command decide:
+0 3 * * MON app /usr/local/bin/monthly-report --if-first-monday
